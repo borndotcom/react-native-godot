@@ -520,7 +520,7 @@ NOTE: Your Mac and your iOS device must be connected to the same network/router 
 # Born
 We’ve opened new positions in Berlin and New York! We’re looking for the best React Native Engineers who want to reach millions of people every day and work at the frontier of technology.
 
-Check out our openings at: [born.com](born.com)
+Check out our openings at: [born.com](https://born.com)
 
 # Commercial Support & Development
 
