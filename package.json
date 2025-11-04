@@ -9,7 +9,6 @@
     "react-native": "js/index",
     "source": "js/index",
     "files": [
-        "js",
         "lib",
         "common",
         "android",
