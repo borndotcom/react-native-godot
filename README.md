@@ -449,7 +449,7 @@ While it is possible to interact with the Godot Engine directly from the main Re
 following line needs to be updated to include ``godot-dev`` as the artifactId:
 
     ```groovy
-    api "com.migeran.libgodot:godot:${libGodotVersion}-SNAPSHOT"
+    api "com.migeran.libgodot:godot-debug:${libGodotVersion}-SNAPSHOT"
     ```
 
 ## Debug Native Godot code
