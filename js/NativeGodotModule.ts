@@ -83,6 +83,3 @@ export const RTNGodot = globalThis.RTNGodot as GodotModuleInterface;
 
 export function runOnGodotThread<T>(f: () => T): Promise<T> {
   console.log("Calling: runOnGodotThread");
-  const worklet = f;
-  return globalThis.RTNGodot.runOnGodotThread(worklet);
-}
