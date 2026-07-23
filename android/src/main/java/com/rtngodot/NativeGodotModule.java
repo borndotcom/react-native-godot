@@ -36,6 +36,7 @@ import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.common.annotations.FrameworkAPI;
 import com.facebook.react.module.annotations.ReactModule;
 import com.facebook.react.turbomodule.core.CallInvokerHolderImpl;
+import com.facebook.react.turbomodule.core.interfaces.CallInvokerHolder;
 import com.migeran.NativeGodotModuleSpec;
 
 @OptIn(markerClass = FrameworkAPI.class)
@@ -49,11 +50,22 @@ public class NativeGodotModule extends NativeGodotModuleSpec {
 
 	public NativeGodotModule(ReactApplicationContext context) {
 		super(context);
-		CallInvokerHolderImpl holder =
-				(CallInvokerHolderImpl)context.getCatalystInstance().getJSCallInvokerHolder();
+		// libgodot_create_godot_instance_android expects the Activity, Godot
+		// engine wrapper and Android services to have been registered first.
+		// Without this, starting an instance aborts in JNI GetLongField(null).
+		RTNLibGodot.getInstance().init(context.getCurrentActivity());
+
+		CallInvokerHolder callInvokerHolder = Objects.requireNonNull(
+				context.getJSCallInvokerHolder(),
+				"The JavaScript call invoker is not available");
+		if (!(callInvokerHolder instanceof CallInvokerHolderImpl)) {
+			throw new IllegalStateException(
+					"Unsupported JavaScript call invoker implementation: "
+							+ callInvokerHolder.getClass().getName());
+		}
 		mHybridData = initHybrid(
 				Objects.requireNonNull(context.getJavaScriptContextHolder()).get(),
-				holder);
+				(CallInvokerHolderImpl)callInvokerHolder);
 	}
 
 	private native HybridData initHybrid(long jsContext, CallInvokerHolderImpl jsCallInvokerHolder);

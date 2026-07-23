@@ -35,4 +35,5 @@ Pod::Spec.new do |s|
   s.header_mappings_dir = 'ios'
 
   install_modules_dependencies(s)
+  s.dependency 'RNWorklets'
 end

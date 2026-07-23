@@ -1,4 +1,20 @@
 {
   "name": "GodotTest",
-  "displayName": "GodotTest"
+  "plugins": [
+    [
+      "@borndotcom/react-native-godot",
+      {
+        "iosPacks": [
+          "GodotTest.pck",
+          "GodotTest2.pck"
+        ]
+      }
+    ]
+  ],
+  "ios": {
+    "bundleIdentifier": "com.godottest"
+  },
+  "android": {
+    "package": "com.godottest"
+  }
 }

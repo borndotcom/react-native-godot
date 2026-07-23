@@ -26,7 +26,6 @@
 #include <ReactCommon/CallInvokerHolder.h>
 #include <fbjni/fbjni.h>
 #include <jsi/jsi.h>
-#include <react/jni/CxxModuleWrapper.h>
 
 using namespace facebook;
 

@@ -41,7 +41,6 @@ class LibGodot {
 	static inline jobject godot_engine = nullptr;
 	static inline jobject class_loader = nullptr;
 	static inline jobject host_activity = nullptr;
-	static inline jint maxSize = 0;
 
 public:
 	static jobject get_asset_manager() {
@@ -79,13 +78,9 @@ public:
 
 	static int get_main_height();
 
-	static jint get_max_size() {
-		return maxSize;
-	}
-
 	static JNIEnv *get_jni_env();
 
-	static JavaVM *get_java_vm();
+	static void set_java_vm(JavaVM *vm);
 
 	static void initialize(JNIEnv *env, jobject p_asset_manager, jobject p_net_utils, jobject p_dir_access_handler, jobject p_file_access_handler, jobject p_godot_io, jobject p_main_surface, jint p_width, jint p_height, jobject p_godot_engine, jobject p_host_activity, jobject p_class_loader);
 

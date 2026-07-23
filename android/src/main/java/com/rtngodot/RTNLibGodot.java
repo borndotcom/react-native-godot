@@ -70,9 +70,7 @@ public class RTNLibGodot implements IGodotLib, GodotHost, GodotRenderView {
 
 	private static Activity mActivity;
 
-	private static SurfaceControl mainSurfaceControl;
-
-	private static RTNLibGodot instance = null;
+	private static final RTNLibGodot INSTANCE = new RTNLibGodot();
 
 	private Godot godot;
 
@@ -83,15 +81,17 @@ public class RTNLibGodot implements IGodotLib, GodotHost, GodotRenderView {
 	private RTNLibGodot() {}
 
 	public static RTNLibGodot getInstance() {
-		if (RTNLibGodot.instance == null) {
-			RTNLibGodot.instance = new RTNLibGodot();
-		}
-		return RTNLibGodot.instance;
+		return INSTANCE;
 	}
 
 	@Override
 	public boolean initialize(Godot godot, AssetManager assetManager, GodotIO godotIO, GodotNetUtils godotNetUtils, DirectoryAccessHandler directoryAccessHandler, FileAccessHandler fileAccessHandler, boolean b) {
 		ClassLoader loader = RTNLibGodot.class.getClassLoader();
+		WindowSurfaceData mainWindow = windowData.get("");
+		if (mainWindow == null || mainWindow.surface == null) {
+			Log.e(TAG, "Main window surface is unavailable; call init() before initialize()");
+			return false;
+		}
 
 		initialize(
 				assetManager,
@@ -99,9 +99,9 @@ public class RTNLibGodot implements IGodotLib, GodotHost, GodotRenderView {
 				directoryAccessHandler,
 				fileAccessHandler,
 				godotIO,
-				Objects.requireNonNull(windowData.get("")).surface,
-				surfaceSize,
-				surfaceSize,
+				mainWindow.surface,
+				mainWindow.width,
+				mainWindow.height,
 				godot,
 				mActivity,
 				loader);
@@ -356,18 +356,16 @@ public class RTNLibGodot implements IGodotLib, GodotHost, GodotRenderView {
 		}
 	}
 
-	private static Map<String, WindowSurfaceData> windowData = new HashMap<>();
+	private static final Map<String, WindowSurfaceData> windowData = new HashMap<>();
 
-	private static int surfaceSize;
-
-	private static void createWindowSurface(String name, int width, int height, boolean persistent) {
+	private static void createWindowSurface(String name, int width, int height) {
 		SurfaceControl.Builder b = new SurfaceControl.Builder();
 		SurfaceControl control = b.setBufferSize(width, height)
 										 .setFormat(PixelFormat.RGBA_8888)
 										 .setName(name)
 										 .build();
 
-		WindowSurfaceData wsData = new WindowSurfaceData(control, width, height, persistent);
+		WindowSurfaceData wsData = new WindowSurfaceData(control, width, height, name.isEmpty());
 
 		windowData.put(name, wsData);
 	}
@@ -376,7 +374,7 @@ public class RTNLibGodot implements IGodotLib, GodotHost, GodotRenderView {
 	private static WindowSurfaceData getOrCreateWindowSurface(String name, int width, int height) {
 		WindowSurfaceData wsData = windowData.get(name);
 		if (wsData == null) {
-			createWindowSurface(name, width, height, false);
+			createWindowSurface(name, width, height);
 			wsData = Objects.requireNonNull(windowData.get(name));
 		}
 		return wsData;
@@ -400,6 +398,7 @@ public class RTNLibGodot implements IGodotLib, GodotHost, GodotRenderView {
 			try (SurfaceControl.Transaction t = new SurfaceControl.Transaction()) {
 				// Set new parent
 				t.reparent(wsData.control, control);
+				t.setLayer(wsData.control, 1);
 				t.setVisibility(wsData.control, true);
 				if (wsData.width != width || wsData.height != height) {
 					t.setBufferSize(wsData.control, width, height);
@@ -445,7 +444,7 @@ public class RTNLibGodot implements IGodotLib, GodotHost, GodotRenderView {
 		}
 	}
 
-	public void init(Activity activity) {
+	public synchronized void init(Activity activity) {
 		if (inited) {
 			return;
 		}
@@ -458,21 +457,21 @@ public class RTNLibGodot implements IGodotLib, GodotHost, GodotRenderView {
 		}
 		DisplayMetrics metrics = new DisplayMetrics();
 		mActivity.getWindowManager().getDefaultDisplay().getMetrics(metrics);
-
-		createWindowSurface("", metrics.widthPixels, metrics.heightPixels, true);
+		getOrCreateWindowSurface("", metrics.widthPixels, metrics.heightPixels);
 
 		GodotLib.setGodotLibImpl(RTNLibGodot.getInstance());
 		godot = Godot.getInstance(mActivity);
 		godot.setActivity(mActivity);
 
-		Set<GodotPlugin> runtimePlugins = new HashSet<GodotPlugin>();
+		Set<GodotPlugin> runtimePlugins = new HashSet<>();
 		runtimePlugins.add(new AndroidRuntimePlugin(godot));
 		runtimePlugins.addAll(getHostPlugins());
 
-		List<String> commands = new ArrayList<String>();
+		List<String> commands = new ArrayList<>();
 
 		if (!godot.initEngine(this, commands, runtimePlugins)) {
 			Log.e(TAG, "Unable to initialize Godot engine layer");
+			return;
 		}
 
 		mInputHandler = new GodotInputHandler(mActivity, godot);
@@ -510,7 +509,7 @@ public class RTNLibGodot implements IGodotLib, GodotHost, GodotRenderView {
 
 	private native void removeWindowNative(String windowName);
 
-	public Set<GodotPlugin> hostPlugins = new HashSet<>();
+	private final Set<GodotPlugin> hostPlugins = new HashSet<>();
 
 	public void addHostPlugin(GodotPlugin plugin) {
 		hostPlugins.add(plugin);

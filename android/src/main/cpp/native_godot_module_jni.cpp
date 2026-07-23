@@ -49,6 +49,14 @@ void NativeGodotModuleJNI::registerNatives() {
 }
 
 bool NativeGodotModuleJNI::installTurboModule() {
+	// A zero JavaScript context must never be reported as a successful install:
+	// doing so leaves global.RTNGodot undefined and merely moves the crash to
+	// the first API call. Fail cleanly instead of dereferencing a null runtime.
+	if (rnRuntime_ == nullptr) {
+		LOGE("JavaScript runtime is unavailable; cannot install NativeGodotModule.");
+		return false;
+	}
+
 	jsi::Runtime &rnRuntime = *rnRuntime_;
 	jsi::Value godotModule = createNativeGodotModule(rnRuntime, callInvoker_);
 	if (!godotModule.isObject()) {

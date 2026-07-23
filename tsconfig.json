@@ -1,6 +1,6 @@
 {
-  "extends": "@react-native/typescript-config/tsconfig.json",
-    "compilerOptions": {
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
     "paths": {
       "@borndotcom/react-native-godot": ["./js/index"]
     },
@@ -25,5 +25,6 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "esnext"
-  }
+  },
+  "include": ["js/**/*.ts", "js/**/*.tsx"]
 }

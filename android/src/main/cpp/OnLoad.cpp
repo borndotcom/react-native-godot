@@ -53,9 +53,13 @@
 // }
 
 #include "native_godot_module_jni.h"
+#include "libgodot_jni.h"
 #include <fbjni/fbjni.h>
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
+	// LibGodot threads can request a JNIEnv before the engine-level initialize
+	// callback runs, so retain the VM as soon as this shared library is loaded.
+	LibGodot::set_java_vm(vm);
 	return facebook::jni::initialize(vm, [] {
 		NativeGodotModuleJNI::registerNatives();
 	});

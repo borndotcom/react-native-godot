@@ -21,19 +21,14 @@ if(NOT ${CMAKE_BUILD_TYPE} MATCHES "Debug")
 endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
 
 # Prefab packages from React Native
 find_package(fbjni REQUIRED CONFIG)
 add_library(fbjni ALIAS fbjni::fbjni)
-
 find_package(ReactAndroid REQUIRED CONFIG)
 add_library(jsi ALIAS ReactAndroid::jsi)
 add_library(reactnative ALIAS ReactAndroid::reactnative)
-
-# Consume shared libraries and headers from prefabs
-
-find_package(react-native-worklets-core REQUIRED CONFIG)
+find_package(react-native-worklets REQUIRED CONFIG)
 
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/source/codegen/jni" generated)
 set(LIBGODOT_CPP_VERSION ${GODOT_CPP_VERSION})
@@ -51,6 +46,10 @@ file(GLOB rtngodot_SRC CONFIGURE_DEPENDS *.cpp)
 file(GLOB rtngodot_common_SRC CONFIGURE_DEPENDS ../../../../common/*.cpp)
 add_library(rtngodot SHARED ${rtngodot_SRC} ${rtngodot_common_SRC})
 
+# Android 15+ devices may use 16 KiB memory pages. Keep this module loadable
+# there instead of relying on the OS page-size compatibility mode.
+target_link_options(rtngodot PRIVATE "-Wl,-z,max-page-size=16384")
+
 target_include_directories(rtngodot PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         "../../../../common"
@@ -61,7 +60,7 @@ target_link_libraries(
         fbjni::fbjni
         ReactAndroid::jsi
         ReactAndroid::reactnative
-        react-native-worklets-core::rnworklets
+        react-native-worklets::worklets
         react_codegen_RTNGodotSpec
 )
 

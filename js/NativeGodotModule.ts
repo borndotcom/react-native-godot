@@ -23,66 +23,68 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-import { TurboModule, TurboModuleRegistry } from "react-native";
-import { IWorkletContext, Worklets } from "react-native-worklets-core";
+import { TurboModuleRegistry, type TurboModule } from "react-native";
+import {
+  createWorkletRuntime,
+  runOnRuntimeAsync,
+  type WorkletRuntime,
+} from "react-native-worklets";
 
 export interface Spec extends TurboModule {
   installTurboModule(): boolean;
 }
 
-const GodotInstaller =
-  TurboModuleRegistry.getEnforcing<Spec>("NativeGodotModule");
+const GodotInstaller = TurboModuleRegistry.get<Spec>("NativeGodotModule");
 
 export interface GodotModuleInterface {
   createInstance(args: Array<string>): any;
   getInstance(): any;
   API(): any;
-  updateWindow(windowName: string): any;
+  updateWindow(windowName: string, adding: boolean): void;
   pause(): void;
   resume(): void;
   is_paused(): boolean;
-  runOnGodotThread<T>(f: () => T): Promise<T>;
+  createGodotQueue(): object;
   destroyInstance(): void;
-  crash(): void;
 }
 
-console.log("Loading NativeGodotModule...");
-
 declare global {
-  var RTNGodot: GodotModuleInterface; // Godot
-  var __godotWorkletContext: IWorkletContext;
+  var RTNGodot: GodotModuleInterface | undefined; // Godot
+  var __godotWorkletRuntime: WorkletRuntime | undefined;
 }
 
 if (globalThis.RTNGodot == null) {
-  if (
-    GodotInstaller == null ||
-    typeof GodotInstaller.installTurboModule !== "function"
-  ) {
+  if (GodotInstaller == null) {
     console.error(
       "Native Godot Module cannot be found! Make sure you correctly " +
         "installed native dependencies and rebuilt your app."
     );
-  } else {
-    console.log("Calling NativeGodotModule.installTurboModule()");
-    globalThis.__godotWorkletContext =
-      Worklets.createContext("ReactNativeGodot");
-    let result = GodotInstaller.installTurboModule();
-    if (!result) {
-      console.log("Failed NativeGodotModule.installTurboModule()");
-    }
+  } else if (!GodotInstaller.installTurboModule()) {
+    console.error("NativeGodotModule installation failed.");
   }
+}
 
-  if (globalThis.RTNGodot == null) {
-    console.log("Unable to load NativeGodotModule: " + globalThis.RTNGodot);
-  }
-} else {
-  console.log("NativeGodotModule loaded.");
+const installedGodotModule = globalThis.RTNGodot;
+if (installedGodotModule != null && globalThis.__godotWorkletRuntime == null) {
+  const godotQueue = installedGodotModule.createGodotQueue();
+  globalThis.__godotWorkletRuntime = createWorkletRuntime({
+    name: "ReactNativeGodot",
+    queue: godotQueue,
+    initializer: () => {
+      "worklet";
+      globalThis.RTNGodot = installedGodotModule;
+    },
+  });
 }
 
 export const RTNGodot = globalThis.RTNGodot as GodotModuleInterface;
 
 export function runOnGodotThread<T>(f: () => T): Promise<T> {
-  console.log("Calling: runOnGodotThread");
-  const worklet = f;
-  return globalThis.RTNGodot.runOnGodotThread(worklet);
+  const runtime = globalThis.__godotWorkletRuntime;
+  if (runtime == null) {
+    return Promise.reject(
+      new Error("NativeGodotModule worklet runtime is not installed")
+    );
+  }
+  return runOnRuntimeAsync(runtime, f);
 }

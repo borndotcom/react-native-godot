@@ -8,7 +8,7 @@ LOCAL_DEP_PATH="${1:-}"
 
 if [ "$LOCAL_DEP_PATH" != "" ]
 then
-    export LIBGODOT_XCFRAMEWORK_PATH=$LOCAL_DEP_PATH/libgodot.xcframework.zip 
+    export LIBGODOT_XCFRAMEWORK_PATH=$LOCAL_DEP_PATH/libgodot.xcframework.zip
     export LIBGODOT_CPP_XCFRAMEWORK_PATH=$LOCAL_DEP_PATH/libgodot-cpp.xcframework.zip
     export LIBGODOT_CPP_ANDROID_PATH=$LOCAL_DEP_PATH/godot-cpp-android.zip
     export LIBGODOT_ANDROID_PATH=$LOCAL_DEP_PATH/libgodot-android.zip
