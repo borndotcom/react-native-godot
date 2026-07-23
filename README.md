@@ -128,6 +128,18 @@ npx expo install @borndotcom/react-native-godot react-native-worklets
 
 Expo's install command adds the package config plugin automatically. The plugin keeps clean prebuilds on Android API 29 and the supported ARM ABIs without an `expo-build-properties` entry. To bundle Godot packs on iOS, pass their filenames to that plugin as shown in the example app's `app.json`.
 
+If the dependency was added manually (for example through a Git URL or a workspace), register the package plugin explicitly:
+
+```typescript
+export default {
+  expo: {
+    plugins: ['@borndotcom/react-native-godot'],
+  },
+};
+```
+
+This is the only Android configuration the package needs. Do not duplicate its minimum SDK or add a relative LibGodot Maven path with `expo-build-properties`.
+
 For a React Native Community CLI project, use your package manager instead and ensure the Worklets Babel plugin is enabled according to the `react-native-worklets` installation guide.
 
 ## Download the prebuilt LibGodot packages
@@ -140,7 +152,7 @@ yarn download-prebuilt
 
 This way React Native Godot can be updated independently from LibGodot, and also local, customized builds of LibGodot are supported.
 
-On Android, the library registers the downloaded LibGodot Maven repository from its own resolved package directory. Do not add `android.extraMavenRepos` or an `expo-build-properties` entry for LibGodot; this works with hoisted dependencies, workspaces and regular `node_modules` layouts.
+On Expo, the package config plugin derives the downloaded LibGodot Maven repository from its installed location and writes `android.extraMavenRepos` automatically. Do not add that property or an `expo-build-properties` entry manually. The generated path works with hoisted dependencies, workspaces and regular `node_modules` layouts; React Native Community CLI builds retain the native Gradle fallback.
 
 The bundled Android LibGodot artifacts currently contain `arm64-v8a` and `armeabi-v7a`. The Gradle module automatically limits its native build to those ABIs even when Expo requests x86 variants for other dependencies. Running the Godot view itself therefore requires an ARM Android device or ARM emulator.
 
