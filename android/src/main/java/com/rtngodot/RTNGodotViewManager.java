@@ -63,6 +63,10 @@ public class RTNGodotViewManager extends SimpleViewManager<RTNGodotView> impleme
 	@NonNull
 	@Override
 	protected RTNGodotView createViewInstance(@NonNull ThemedReactContext context) {
+		// TurboModules can be created before React Native has attached the
+		// current Activity. The view is created on the UI thread, so retrying
+		// here makes initialization deterministic for bridgeless/Expo apps.
+		RTNLibGodot.getInstance().init(context.getCurrentActivity());
 		return new RTNGodotView(context);
 	}
 

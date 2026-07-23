@@ -112,11 +112,23 @@ Born React Native Godot is distributed on npm.
 
 Just follow these steps to add it to your React Native application:
 
+## Compatibility
+
+The current example is aligned with Expo SDK 57, React Native 0.86 and React 19.2. Node.js follows React Native's supported ranges (`^20.19.4`, `^22.13.0`, `^24.3.0` or `>=25`); this repository uses Node.js 22.13 as its development baseline. The example uses the New Architecture, Hermes and `react-native-worklets` 0.10, which is the Worklets version selected by Expo SDK 57.
+
+Expo monorepos are supported through Expo's automatic Metro configuration. Keep the example/app package inside the workspace list and base its Metro configuration on `expo/metro-config`; custom `watchFolders`, `resolver.nodeModulesPaths` and `disableHierarchicalLookup` settings are not required on Expo SDK 52 or newer. In this repository the library itself is the workspace root, so the example links it with Yarn's `portal:../` protocol.
+
+The Android integration requires Android 10 (API 29) because window embedding uses `SurfaceControl`. The bundled Godot binaries currently support `armeabi-v7a` and `arm64-v8a`; the example restricts `reactNativeArchitectures` to those ABIs so its APK never advertises an x86 variant that cannot load Godot.
+
 ## Update `package.json`
 
 ```sh
-yarn add @borndotcom/react-native-godot
+npx expo install @borndotcom/react-native-godot react-native-worklets
 ```
+
+Expo's install command adds the package config plugin automatically. The plugin keeps clean prebuilds on Android API 29 and the supported ARM ABIs without an `expo-build-properties` entry. To bundle Godot packs on iOS, pass their filenames to that plugin as shown in the example app's `app.json`.
+
+For a React Native Community CLI project, use your package manager instead and ensure the Worklets Babel plugin is enabled according to the `react-native-worklets` installation guide.
 
 ## Download the prebuilt LibGodot packages
 
@@ -127,6 +139,10 @@ yarn download-prebuilt
 ```
 
 This way React Native Godot can be updated independently from LibGodot, and also local, customized builds of LibGodot are supported.
+
+On Android, the library registers the downloaded LibGodot Maven repository from its own resolved package directory. Do not add `android.extraMavenRepos` or an `expo-build-properties` entry for LibGodot; this works with hoisted dependencies, workspaces and regular `node_modules` layouts.
+
+The bundled Android LibGodot artifacts currently contain `arm64-v8a` and `armeabi-v7a`. The Gradle module automatically limits its native build to those ABIs even when Expo requests x86 variants for other dependencies. Running the Godot view itself therefore requires an ARM Android device or ARM emulator.
 
 ## Import React Native Godot in your App code
 
@@ -372,7 +388,7 @@ iface.test_callable(function(s: string) {
 
 In a React Native app, the main JavaScript thread, where the bulk of the JavaScript code of the application runs is separate from the Android or iOS apps's main thread.
 
-This way the JS Thread's processing does not affect the main application UI. Following the same pattern, the Godot Engine is also running on its own thread that is separate from both the application's and React Native's main JavaScript thread. As JavaScript is single-threaded by design, to be able to communicate with the Godot thread from JavaScript, we use the well-known [react-native-worklets-core](https://github.com/margelo/react-native-worklets-core) library, which allows us running JS code in the Godot thread using worklets.
+This way the JS Thread's processing does not affect the main application UI. Following the same pattern, the Godot Engine is also running on its own thread that is separate from both the application's and React Native's main JavaScript thread. As JavaScript is single-threaded by design, to be able to communicate with the Godot thread from JavaScript, we use [react-native-worklets](https://docs.swmansion.com/react-native-worklets/), which allows us to run JS code in the Godot thread using worklets.
 
 Worklets are JavaScript functions designated with a 'worklet' keyword. 
 
@@ -382,7 +398,7 @@ function worklet() {
 }
 ```
 
-These functions and all their external dependencies are transpiled into self contained JS bundles so they can be executed in separate JS contexts associated with separate threads. For more information on how this works, please refer to the [React Native Worklets Core documentation](https://github.com/margelo/react-native-worklets-core/blob/main/docs/USAGE.md).
+These functions and all their external dependencies are transformed so they can be executed in separate JS contexts associated with separate threads. For more information, refer to the [React Native Worklets documentation](https://docs.swmansion.com/react-native-worklets/).
 
 React Native Godot provides a helper function called `runOnGodotThread()` which will allow you to execute such _workletized_ JS functions on the Godot thread.
 

@@ -25,8 +25,6 @@
 
 package com.rtngodot;
 
-import android.util.Log;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -49,8 +47,6 @@ public class GodotPackage extends TurboReactPackage {
 		System.loadLibrary("rtngodot");
 	}
 
-	private static final String TAG = "GodotPackage";
-
 	@Override
 	public List<ViewManager> createViewManagers(@NonNull ReactApplicationContext reactContext) {
 		return Collections.singletonList(new RTNGodotViewManager(reactContext));
@@ -59,14 +55,11 @@ public class GodotPackage extends TurboReactPackage {
 	@Nullable
 	@Override
 	public NativeModule getModule(String name, ReactApplicationContext reactContext) {
-		Log.w(TAG, "Called getModule with name: " + name);
 		if (NativeGodotModule.NAME.equals(name)) {
 			return new NativeGodotModule(reactContext);
 		}
 		return null;
 	}
-
-	public static String MODULE_NAME = "NativeGodotModule";
 
 	@Override
 	public ReactModuleInfoProvider getReactModuleInfoProvider() {

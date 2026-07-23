@@ -6,9 +6,37 @@ def safeAppExtGet(prop, fallback) {
     appProject?.ext?.has(prop) ? appProject.ext.get(prop) : fallback
 }
 
+def libGodotSupportedAbis() {
+  return ["armeabi-v7a", "arm64-v8a"]
+}
+
 def reactNativeArchitectures() {
-  def value = project.getProperties().get("reactNativeArchitectures")
-  return value ? value.split(",") : ["armeabi-v7a", "arm64-v8a"]
+  if (project.ext.has("rtngodotArchitectures")) {
+    return project.ext.get("rtngodotArchitectures")
+  }
+
+  def availableAbis = libGodotSupportedAbis()
+  def requested = project.getProperties().get("reactNativeArchitectures")
+  def requestedAbis = requested ? requested.split(",")*.trim() : availableAbis
+  def supportedAbis = requestedAbis.findAll { availableAbis.contains(it) }
+  def unsupportedAbis = requestedAbis - supportedAbis
+
+  if (!unsupportedAbis.isEmpty()) {
+    logger.lifecycle(
+      "[RTNGodot] Ignoring unsupported Android ABIs ${unsupportedAbis}. " +
+      "The bundled LibGodot binaries support ${availableAbis}."
+    )
+  }
+
+  if (supportedAbis.isEmpty()) {
+    throw new GradleException(
+      "[RTNGodot] None of the requested Android ABIs (${requestedAbis}) are supported. " +
+      "Use one of ${availableAbis}."
+    )
+  }
+
+  project.ext.set("rtngodotArchitectures", supportedAbis)
+  return supportedAbis
 }
 
 def resolveBuildType() {
@@ -20,18 +48,33 @@ def resolveBuildType() {
 def resolveReactNativeDirectory() {
     def reactNativeLocation = safeAppExtGet("REACT_NATIVE_NODE_MODULES_DIR", null)
     if (reactNativeLocation != null) {
-        return file(reactNativeLocation)
+        return file(reactNativeLocation).canonicalFile
     }
 
-    // monorepo workaround
-    // react-native can be hoisted or in project's own node_modules
-    def reactNativeFromProjectNodeModules = file("${rootProject.projectDir}/../node_modules/react-native")
-    if (reactNativeFromProjectNodeModules.exists()) {
-        return reactNativeFromProjectNodeModules
+    def command = [
+            "node",
+            "--print",
+            "require.resolve('react-native/package.json', { paths: [process.argv[1], process.argv[2]] })",
+            projectDir.absolutePath,
+            rootProject.projectDir.absolutePath,
+    ]
+    def process = command.execute(null, projectDir)
+    def stdout = new StringBuilder()
+    def stderr = new StringBuilder()
+    process.consumeProcessOutput(stdout, stderr)
+    def exitCode = process.waitFor()
+
+    if (exitCode == 0) {
+        def packageJson = file(stdout.toString().trim())
+        if (packageJson.exists()) {
+            return packageJson.parentFile.canonicalFile
+        }
     }
 
     throw new GradleException(
-            "[RTNGodot] Unable to resolve react-native location in node_modules. You should project extension property (in `app/build.gradle`) `REACT_NATIVE_NODE_MODULES_DIR` with path to react-native."
+            "[RTNGodot] Unable to resolve react-native from ${projectDir}. " +
+            "Set the app extension property REACT_NATIVE_NODE_MODULES_DIR when using a non-standard package layout. " +
+            stderr.toString().trim()
     )
 }
 
@@ -47,12 +90,6 @@ def isNewArchitectureEnabled() {
 }
 
 def reactNativeRootDir = resolveReactNativeDirectory()
-
-def reactProperties = new Properties()
-file("$reactNativeRootDir/ReactAndroid/gradle.properties").withInputStream { reactProperties.load(it) }
-
-def REACT_NATIVE_VERSION = reactProperties.getProperty("VERSION_NAME")
-def REACT_NATIVE_MINOR_VERSION = REACT_NATIVE_VERSION.startsWith("0.0.0-") ? 1000 : REACT_NATIVE_VERSION.split("\\.")[1].toInteger()
 
 def prefabHeadersDir = project.file("$buildDir/prefab-headers/rtngodot")
 
@@ -76,6 +113,31 @@ def getPrebuiltLibraryVersion(libName) {
 
 def libGodotVersion = getPrebuiltLibraryVersion("libgodot-android")
 def godotCppVersion = getPrebuiltLibraryVersion("libgodot-cpp-android")
+def libGodotMavenRepo = file("$projectDir/libs/libgodot-android/${libGodotVersion}").canonicalFile
+
+if (!libGodotMavenRepo.isDirectory()) {
+  throw new GradleException(
+    "[RTNGodot] Bundled LibGodot Maven repository was not found at ${libGodotMavenRepo}. " +
+    "Run the package's download-prebuilt command before building Android."
+  )
+}
+
+// Maven repositories are not transitive. Register the repository bundled with this
+// package directly on every consumer project, using this module's real location so
+// hoisted dependencies, workspaces, portals, and conventional node_modules layouts
+// all resolve without android.extraMavenRepos or expo-build-properties.
+rootProject.allprojects { targetProject ->
+  if (targetProject.repositories.findByName("libgodot") == null) {
+    targetProject.repositories.maven {
+      name = "libgodot"
+      url = uri(libGodotMavenRepo)
+      content {
+        includeGroup("com.migeran.libgodot")
+      }
+    }
+  }
+
+}
 
 buildscript {
   ext.safeExtGet = {prop, fallback ->
@@ -104,7 +166,6 @@ android {
   buildFeatures {
     prefab true
     prefabPublishing true
-    buildConfig true
   }
 
   // If it doesn't exist
@@ -120,11 +181,11 @@ android {
 
 
   defaultConfig {
-    minSdkVersion safeExtGet('minSdkVersion', 29)
+    // SurfaceControl is the foundation of the embedded window implementation
+    // and is only available from Android 10 (API 29).
+    minSdkVersion 29
     targetSdkVersion safeExtGet('targetSdkVersion', 33)
     ndkVersion safeExtGet('ndkVersion', "26.1.10909125")
-    buildConfigField("boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString())
-    buildConfigField("String", "FLAVOR", "\"rtngodot\"")  // Just a placeholder value.
     ndk {
       // Specifies the ABI configurations of your native
       // libraries Gradle should build and package with your app.
@@ -134,7 +195,6 @@ android {
     externalNativeBuild {
         cmake {
             arguments "-DANDROID_STL=c++_shared",
-                    "-DREACT_NATIVE_MINOR_VERSION=${REACT_NATIVE_MINOR_VERSION}",
                     "-DANDROID_TOOLCHAIN=clang",
                     "-DREACT_NATIVE_DIR=${toPlatformFileString(reactNativeRootDir.path)}",
                     "-DIS_NEW_ARCHITECTURE_ENABLED=${isNewArchitectureEnabled().toString()}",
@@ -177,7 +237,6 @@ android {
                 "**/libreact_render_graphics.so",
                 "**/libreact_render_imagemanager.so",
                 "**/libreact_render_mapbuffer.so",
-                "**/libreact_render_debug.so",
                 "**/libreact_utils.so",
                 "**/librrc_image.so",
                 "**/librrc_view.so",
@@ -195,44 +254,22 @@ android {
     }
 }
 
-/**
- * Task: registerLibGodotRepo
- *
- * Adds a Maven repository named 'libgodot' that points to the locally bundled pre‑built
- * Godot Android artifacts. The repository URL is relative to this library module:
- *
- *   libs/libgodot-android/${libGodotVersion}/
- *
- * The task is executed before any compile/assemble tasks so that the consuming app can resolve
- * `com.migeran.libgodot:godot-dev` (or similar) from the local directory.
- */
-task registerLibGodotRepo {
-    // Capture the version at configuration time
-    def libVersion = libGodotVersion
-    def repoUrl = uri("$projectDir/libs/libgodot-android/${libVersion}/")
-    rootProject.allprojects { proj ->
-        // Avoid adding the same repo multiple times
-        if (!proj.repositories.any { it instanceof MavenArtifactRepository && it.name == 'libgodot' }) {
-            proj.repositories.maven {
-                name = 'libgodot'
-                url = repoUrl
-            }
-            print("Added local Maven repository 'libgodot' to project ${proj.path}: ${repoUrl}\n")
-        }
-    }
-}
-
-
 repositories {
+  maven {
+    name = "libgodot"
+    url = uri(libGodotMavenRepo)
+    content {
+      includeGroup("com.migeran.libgodot")
+    }
+  }
   mavenCentral()
   google()
 }
 
 dependencies {
   implementation 'com.facebook.react:react-native'
-  implementation project(':react-native-worklets-core')
+  implementation project(':react-native-worklets')
   api "com.migeran.libgodot:godot-debug:${libGodotVersion}-SNAPSHOT"
-  implementation('com.jakewharton.threetenabp:threetenabp:1.4.9')
 }
 
 task deleteCmakeCache() {

@@ -1,4 +1,4 @@
-// From: react-native-worklets-core/android/fix-prefab.gradle
+// From: react-native-worklets/android/fix-prefab.gradle
 
 tasks.configureEach { task ->
   // Make sure that we generate our prefab publication file only after having built the native library

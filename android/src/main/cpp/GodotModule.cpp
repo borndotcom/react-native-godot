@@ -231,7 +231,33 @@ GDExtensionBool GDE_EXPORT gdextension_default_init(GDExtensionInterfaceGetProcA
 }
 }
 
-static void frameCallback64(int64_t frameTimeNanos, void *data) {
+using PostFrameCallback64 = void (*)(AChoreographer *, AChoreographer_frameCallback64, void *);
+
+static void handleFrameCallback(void *data);
+
+static void frameCallback(long, void *data) {
+	handleFrameCallback(data);
+}
+
+static void frameCallback64(int64_t, void *data) {
+	handleFrameCallback(data);
+}
+
+static void postFrameCallback(AChoreographer *choreographer, void *data) {
+	static auto postFrameCallback64 = reinterpret_cast<PostFrameCallback64>(
+			dlsym(RTLD_DEFAULT, "AChoreographer_postFrameCallback64"));
+	if (postFrameCallback64 != nullptr) {
+		postFrameCallback64(choreographer, frameCallback64, data);
+		return;
+	}
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+	AChoreographer_postFrameCallback(choreographer, frameCallback, data);
+#pragma clang diagnostic pop
+}
+
+static void handleFrameCallback(void *data) {
 	GodotModule *self = (GodotModule *)data;
 	if (!self->is_paused()) {
 		godot::GodotInstance *instance = self->get_instance();
@@ -241,7 +267,7 @@ static void frameCallback64(int64_t frameTimeNanos, void *data) {
 			instance->iteration();
 		}
 		AChoreographer *choreographer = AChoreographer_getInstance();
-		AChoreographer_postFrameCallback64(choreographer, frameCallback64, data);
+		postFrameCallback(choreographer, data);
 	}
 }
 
@@ -348,7 +374,7 @@ godot::GodotInstance *GodotModule::get_or_create_instance(std::vector<std::strin
 
 	if (instance->start()) {
 		AChoreographer *choreographer = AChoreographer_getInstance();
-		AChoreographer_postFrameCallback64(choreographer, frameCallback64, this);
+		postFrameCallback(choreographer, this);
 	}
 
 	{
@@ -523,7 +549,7 @@ void GodotModule::updateState() {
 		// Register the frame callback again
 		data->thread.enqueue([this]() {
 			AChoreographer *choreographer = AChoreographer_getInstance();
-			AChoreographer_postFrameCallback64(choreographer, frameCallback64, this);
+			postFrameCallback(choreographer, this);
 		});
 	}
 }
@@ -575,7 +601,7 @@ godot::Callable GodotModule::create_callable(std::function<void(const godot::Var
 void GodotModule::registerWindowUpdateCallback(std::string name, void *handle, std::function<void(bool)> f, void *ref) {
 	AndroidPlatformData *data = static_cast<AndroidPlatformData *>(_data);
 	std::lock_guard lock(data->windowUpdateMutex);
-	LOGD("Registering Window: %llx, %s", (uint64_t)handle, name.c_str());
+	LOGD("Registering Window: %p, %s", handle, name.c_str());
 	if (data->handleToWindowName.contains(handle)) {
 		std::string currentName = data->handleToWindowName[handle];
 		if (currentName != name) {
@@ -593,7 +619,7 @@ void GodotModule::unregisterWindowUpdateCallback(void *handle) {
 	std::lock_guard lock(data->windowUpdateMutex);
 	if (data->handleToWindowName.contains(handle)) {
 		std::string name = data->handleToWindowName[handle];
-		LOGD("Unregistering Window: %llx, %s", (uint64_t)handle, name.c_str());
+		LOGD("Unregistering Window: %p, %s", handle, name.c_str());
 		WindowFuncData fd = data->windowUpdateCallbacks[name];
 		JNIEnv *env = LibGodot::get_jni_env();
 		env->DeleteGlobalRef(fd.ref);

@@ -73,7 +73,6 @@ void LibGodot::initialize(JNIEnv *env, jobject p_asset_manager, jobject p_net_ut
 	godot_io = env->NewGlobalRef(p_godot_io);
 	ANativeWindow *mainSurface = ANativeWindow_fromSurface(env, p_main_surface);
 	windowMap[""] = WindowData(mainSurface, p_width, p_height, 0);
-	maxSize = fmax(p_width, p_height);
 	godot_engine = env->NewGlobalRef(p_godot_engine);
 	host_activity = env->NewGlobalRef(p_host_activity);
 	class_loader = env->NewGlobalRef(p_class_loader);
@@ -141,13 +140,21 @@ void LibGodot::cleanup(JNIEnv *env) {
 }
 
 JNIEnv *LibGodot::get_jni_env() {
+	if (!java_vm) {
+		LOGE("LibGodot::get_jni_env() called before JavaVM initialization");
+		return nullptr;
+	}
 	JNIEnv *env;
 	java_vm->AttachCurrentThread(&env, nullptr);
 	return env;
 }
 
-static std::function<void()> createUpdateWindowFunc(std::string p_window_name, int p_width, int p_height, ANativeWindow *p_window_surface, bool p_change_surface) {
-	return [p_window_name, p_width, p_height, p_window_surface, p_change_surface]() {
+void LibGodot::set_java_vm(JavaVM *vm) {
+	java_vm = vm;
+}
+
+static std::function<void()> createUpdateWindowFunc(std::string p_window_name, int p_width, int p_height, ANativeWindow *p_window_surface) {
+	return [p_window_name, p_width, p_height, p_window_surface]() {
 		godot::DisplayServerEmbedded *dse = godot::DisplayServerEmbedded::get_singleton();
 		int32_t windowId = -1;
 		if (p_window_name == "") {
@@ -232,7 +239,7 @@ void LibGodot::updateWindowNative(JNIEnv *env, jstring p_name, jobject p_surface
 	}
 	godot::GodotInstance *instance = GodotModule::get_singleton()->get_instance();
 	if (instance && instance->is_started()) {
-		GodotModule::get_singleton()->runOnGodotThread(createUpdateWindowFunc(windowName, p_width, p_height, windowSurface, changeSurface), true);
+		GodotModule::get_singleton()->runOnGodotThread(createUpdateWindowFunc(windowName, p_width, p_height, windowSurface), true);
 	}
 }
 
@@ -261,7 +268,6 @@ void LibGodot::removeWindowNative(JNIEnv *env, jstring p_name) {
 		godot::GodotInstance *instance = GodotModule::get_singleton()->get_instance();
 		if (instance && instance->is_started()) {
 			GodotModule::get_singleton()->runOnGodotThread([windowName, windowSurface]() {
-				godot::DisplayServerEmbedded *dse = godot::DisplayServerEmbedded::get_singleton();
 				{
 					// Find window
 					godot::MainLoop *mainLoop = godot::Engine::get_singleton()->get_main_loop();
@@ -293,7 +299,7 @@ void LibGodot::updateWindow(std::string windowName) {
 		godot::GodotInstance *instance = GodotModule::get_singleton()->get_instance();
 		WindowData &data = windowMap[windowName];
 		if (instance && instance->is_started()) {
-			GodotModule::get_singleton()->runOnGodotThread(createUpdateWindowFunc(windowName, data.width, data.height, data.surface, windowName != ""));
+			GodotModule::get_singleton()->runOnGodotThread(createUpdateWindowFunc(windowName, data.width, data.height, data.surface));
 		}
 	}
 }
@@ -306,8 +312,7 @@ void LibGodot::updateWindows() {
 			std::string windowName = item.first;
 			WindowData &data = item.second;
 			GodotModule::get_singleton()->runOnGodotThread(
-					createUpdateWindowFunc(windowName, data.width, data.height, data.surface,
-							windowName != ""));
+					createUpdateWindowFunc(windowName, data.width, data.height, data.surface));
 		}
 	}
 }
@@ -366,17 +371,6 @@ struct TouchPos {
 	float pressure = 0;
 	godot::Vector2 tilt;
 };
-
-static godot::String convertToGodotString(JNIEnv *env, jstring s) {
-	godot::String result;
-	{
-		jboolean isCopy;
-		const char *val = env->GetStringUTFChars(s, &isCopy);
-		result = godot::String::utf8(val);
-		env->ReleaseStringUTFChars(s, val);
-	}
-	return result;
-}
 
 static int32_t getWindowId(std::string p_name) {
 	std::lock_guard<std::recursive_mutex> lock(windowMapMutex);
